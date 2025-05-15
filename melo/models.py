@@ -1028,3 +1028,52 @@ class SynthesizerTrn(nn.Module):
         z_hat = self.flow(z_p, y_mask, g=g_tgt, reverse=True)
         o_hat = self.dec(z_hat * y_mask, g=g_tgt)
         return o_hat, y_mask, (z, z_p, z_hat)
+
+    def forward_encoder(
+        self,
+        x,
+        x_lengths,
+        sid,
+        tone,
+        language,
+        ja_bert,
+        noise_scale_w=0.8,
+        sdp_ratio=0,
+        y=None,
+        g=None,
+    ):
+        # x, m_p, logs_p, x_mask = self.enc_p(x, x_lengths, tone, language, bert)
+        # g = self.gst(y)
+        bert = torch.zeros(1, 1024, x.size(-1))
+        # ja_bert = torch.zeros(1, 768, x.size(-1))
+
+        if g is None:
+            if self.n_speakers > 0:
+                g = self.emb_g(sid).unsqueeze(-1)  # [b, h, 1]
+            else:
+                g = self.ref_enc(y.transpose(1, 2)).unsqueeze(-1)
+        if self.use_vc:
+            g_p = None
+        else:
+            g_p = g
+        x, m_p, logs_p, x_mask = self.enc_p(
+            x,  x_lengths, tone, language, bert, ja_bert, g=g_p
+        )
+        logw = self.sdp(x, x_mask, g=g, reverse=True, noise_scale=noise_scale_w) * (
+            sdp_ratio
+        ) + self.dp(x, x_mask, g=g) * (1 - sdp_ratio)
+        
+        return logw, x_mask, g, m_p, logs_p
+
+    def forward_decoder(self, attn, y_mask, g, m_p, logs_p, noise_scale=0.667):
+        m_p = torch.matmul(attn, m_p.transpose(1, 2)).transpose(
+            1, 2
+        )  # [b, t', t], [b, t, d] -> [b, d, t']
+        logs_p = torch.matmul(attn, logs_p.transpose(1, 2)).transpose(
+            1, 2
+        )  # [b, t', t], [b, t, d] -> [b, d, t']
+
+        z_p = m_p + torch.randn(m_p.shape) * torch.exp(logs_p) * noise_scale
+        z = self.flow(z_p, y_mask, g=g, reverse=True)
+        o = self.dec((z * y_mask), g=g)
+        return o

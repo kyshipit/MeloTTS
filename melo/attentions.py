@@ -343,7 +343,7 @@ class MultiHeadAttention(nn.Module):
         if pad_length > 0:
             padded_relative_embeddings = F.pad(
                 relative_embeddings,
-                commons.convert_pad_shape([[0, 0], [pad_length, pad_length], [0, 0]]),
+                commons.convert_pad_shape([[0, 0], [pad_length, pad_length], [0, 0]]),"constant", 0
             )
         else:
             padded_relative_embeddings = relative_embeddings
@@ -359,12 +359,12 @@ class MultiHeadAttention(nn.Module):
         """
         batch, heads, length, _ = x.size()
         # Concat columns of pad to shift from relative to absolute indexing.
-        x = F.pad(x, commons.convert_pad_shape([[0, 0], [0, 0], [0, 0], [0, 1]]))
+        x = F.pad(x, commons.convert_pad_shape([[0, 0], [0, 0], [0, 0], [0, 1]]),"constant", 0)
 
         # Concat extra elements so to add up to shape (len+1, 2*len-1).
         x_flat = x.view([batch, heads, length * 2 * length])
         x_flat = F.pad(
-            x_flat, commons.convert_pad_shape([[0, 0], [0, 0], [0, length - 1]])
+            x_flat, commons.convert_pad_shape([[0, 0], [0, 0], [0, length - 1]]),"constant", 0
         )
 
         # Reshape and slice out the padded elements.
@@ -381,11 +381,11 @@ class MultiHeadAttention(nn.Module):
         batch, heads, length, _ = x.size()
         # pad along column
         x = F.pad(
-            x, commons.convert_pad_shape([[0, 0], [0, 0], [0, 0], [0, length - 1]])
+            x, commons.convert_pad_shape([[0, 0], [0, 0], [0, 0], [0, length - 1]]),"constant", 0
         )
         x_flat = x.view([batch, heads, length**2 + length * (length - 1)])
         # add 0's in the beginning that will skew the elements after reshape
-        x_flat = F.pad(x_flat, commons.convert_pad_shape([[0, 0], [0, 0], [length, 0]]))
+        x_flat = F.pad(x_flat, commons.convert_pad_shape([[0, 0], [0, 0], [length, 0]]),"constant", 0)
         x_final = x_flat.view([batch, heads, length, 2 * length])[:, :, :, 1:]
         return x_final
 

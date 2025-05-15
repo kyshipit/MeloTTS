@@ -9,7 +9,9 @@ import numpy as np
 import torch.nn as nn
 from tqdm import tqdm
 import torch
+import onnx, onnxsim
 
+from .text import language_id_map
 from . import utils
 from . import commons
 from .models import SynthesizerTrn
@@ -133,3 +135,82 @@ class TTS(nn.Module):
                 soundfile.write(output_path, audio, self.hps.data.sampling_rate, format=format)
             else:
                 soundfile.write(output_path, audio, self.hps.data.sampling_rate)
+
+    def export_onnx(self, speaker_id, x_length=256, sdp_ratio=0.2, noise_scale=0.6, noise_scale_w=0.8, speed=1.0,):
+        language = self.language
+        lang_id = language_id_map[language]
+
+        # Export the model
+        with torch.no_grad():
+            x_lengths = torch.LongTensor([x_length])
+            bert = torch.zeros(1, 1024, x_length)
+            ja_bert = torch.zeros(1, 768, x_length)
+            x = torch.zeros(x_length, dtype=torch.int64).unsqueeze(0)
+            tone = torch.randint(1, 5, size=(x_length,), dtype=torch.int64).unsqueeze(0)
+            lang_ids = torch.zeros_like(x)
+            lang_ids[:, 1::2] = lang_id
+            noise_scale = torch.FloatTensor([noise_scale])
+            noise_scale_w = torch.FloatTensor([noise_scale_w])
+            length_scale = torch.FloatTensor([1./speed])
+            sdp_ratio = torch.FloatTensor([sdp_ratio])
+            sid = torch.LongTensor([speaker_id])
+
+            logw, x_mask, g, m_p, logs_p = self.model.forward_encoder(
+                    x,
+                    x_lengths,
+                    sid,
+                    tone,
+                    lang_ids,
+                    ja_bert,
+                    sdp_ratio=sdp_ratio,
+                    noise_scale_w=noise_scale_w,
+                )
+            w = torch.exp(logw) * x_mask * length_scale
+            w_ceil = torch.ceil(w)
+            y_lengths = torch.clamp_min(torch.sum(w_ceil, [1, 2]), 1).long()
+
+            # y_lengths = 2 * x_length = 512
+            y_lengths = torch.FloatTensor([2 * x_length])
+            y_mask = torch.unsqueeze(commons.sequence_mask(y_lengths, None), 1).to(
+                x_mask.dtype
+            )
+            attn_mask = torch.unsqueeze(x_mask, 2) * torch.unsqueeze(y_mask, -1)
+            attn = commons.generate_path(w_ceil, attn_mask).squeeze(1)
+
+            # Export the encoder model
+            inputs = (
+                x, x_lengths, sid, tone, lang_ids, ja_bert, noise_scale_w, sdp_ratio
+            )
+            input_names = ['x', 'x_lengths', 'sid', 'tone', 'lang_ids', 'ja_bert', 'noise_scale_w', 'sdp_ratio']
+            encoder_name = f"encoder-{language}.onnx"
+            self.model.forward = self.model.forward_encoder
+            torch.onnx.export(self.model,
+                            inputs,
+                            encoder_name,
+                            opset_version=16,
+                            input_names = input_names,
+                            output_names = ["logw", "x_mask", "g", "m_p", "logs_p"],
+                            )
+            sim_model,_ = onnxsim.simplify(encoder_name)
+            onnx.save(sim_model, encoder_name)
+            print(f"Export encoder to {encoder_name}")
+
+            # export decoder
+            inputs = (
+                attn, y_mask, g, m_p, logs_p, noise_scale
+            )
+            decoder_name = f"decoder-{language}.onnx"
+            self.model.forward = self.model.forward_decoder
+            torch.onnx.export(
+                                self.model,
+                                inputs,
+                                decoder_name,
+                                export_params=True,
+                                opset_version=16,
+                                # do_constant_folding=True,
+                                input_names = ["attn", "y_mask", "g", "m_p", "logs_p", "noise_scale"],
+                                output_names = ['y']
+                            )
+            sim_model,_ = onnxsim.simplify(decoder_name)
+            onnx.save(sim_model, decoder_name)
+            print(f"Export decoder to {decoder_name}")
