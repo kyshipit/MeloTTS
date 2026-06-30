@@ -364,7 +364,11 @@ def hira2kata(text: str) -> str:
 
 _SYMBOL_TOKENS = set(list("・、。？！"))
 _NO_YOMI_TOKENS = set(list("「」『』―（）［］[]"))
-_TAGGER = MeCab.Tagger()
+#_TAGGER = MeCab.Tagger()
+try:
+    _TAGGER = MeCab.Tagger()
+except Exception:
+    _TAGGER = None
 
 
 def text2kata(text: str) -> str:
