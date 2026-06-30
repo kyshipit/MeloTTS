@@ -32,24 +32,19 @@
 
 ### 🚀 快速开始
 
-#### 1. 安装依赖
-```bash
-pip install -r requirements.txt
-pip install rknn-toolkit2  # 需要 RK3588 开发环境
-```
-
-#### 2. 导出 ONNX
+#### 1. 导出 ONNX
 ```bash
 conda activate 3.9-melotts
+pip install -r requirements.txt
 python export_onnx.py
 ```
 
-#### 3. 生成校准数据（可选，用于 INT8 量化）
+#### 2. 生成校准数据（可选，用于 INT8 量化）
 ```bash
 python generate_dataset.py
 ```
 
-#### 4. 转换为 RKNN
+#### 3. 转换为 RKNN
 ```bash
 conda activate py3.11-tk2-2.3.2
 
