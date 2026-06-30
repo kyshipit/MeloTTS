@@ -177,40 +177,63 @@ class TTS(nn.Module):
             attn_mask = torch.unsqueeze(x_mask, 2) * torch.unsqueeze(y_mask, -1)
             attn = commons.generate_path(w_ceil, attn_mask).squeeze(1)
 
-            # Export the encoder model
-            inputs = (
-                x, x_lengths, sid, tone, lang_ids, ja_bert, noise_scale_w, sdp_ratio
-            )
+            # ============================================================
+            # Export the encoder model（静态版本，无 dynamic_axes）
+            # ============================================================
+            inputs = (x, x_lengths, sid, tone, lang_ids, ja_bert, noise_scale_w, sdp_ratio)
             input_names = ['x', 'x_lengths', 'sid', 'tone', 'lang_ids', 'ja_bert', 'noise_scale_w', 'sdp_ratio']
             encoder_name = f"encoder-{language}.onnx"
+
+            print("\n[Encoder] Input shapes:")
+            for name, tensor in zip(input_names, inputs):
+                print(f"  {name}: {tensor.shape}")
+
             self.model.forward = self.model.forward_encoder
-            torch.onnx.export(self.model,
-                            inputs,
-                            encoder_name,
-                            opset_version=16,
-                            input_names = input_names,
-                            output_names = ["logw", "x_mask", "g", "m_p", "logs_p"],
-                            )
+            torch.onnx.export(
+                self.model,
+                inputs,
+                encoder_name,
+                opset_version=16,
+                do_constant_folding=True,          # 常量折叠
+                keep_initializers_as_inputs=False, # 移除常量输入
+                input_names=input_names,
+                output_names=["logw", "x_mask", "g", "m_p", "logs_p"],
+            )
             sim_model,_ = onnxsim.simplify(encoder_name)
             onnx.save(sim_model, encoder_name)
-            print(f"Export encoder to {encoder_name}")
+            print(f"Export static encoder to {encoder_name}")
 
-            # export decoder
-            inputs = (
-                attn, y_mask, g, m_p, logs_p, noise_scale
-            )
+            # ============================================================
+            # export decoder（完整动态版，opset=16，前两维固定）
+            # ============================================================
+            inputs = (attn, y_mask, g, m_p, logs_p, noise_scale)
+            input_names = ["attn", "y_mask", "g", "m_p", "logs_p", "noise_scale"]
             decoder_name = f"decoder-{language}.onnx"
+            
+            print("\n[Decoder] Input shapes:")
+            for name, tensor in zip(input_names, inputs):
+                print(f"  {name}: {tensor.shape}")
+            
             self.model.forward = self.model.forward_decoder
             torch.onnx.export(
-                                self.model,
-                                inputs,
-                                decoder_name,
-                                export_params=True,
-                                opset_version=16,
-                                # do_constant_folding=True,
-                                input_names = ["attn", "y_mask", "g", "m_p", "logs_p", "noise_scale"],
-                                output_names = ['y']
-                            )
+                self.model,
+                inputs,  # (attn, y_mask, g, m_p, logs_p, noise_scale)
+                decoder_name,
+                export_params=True,
+                opset_version=16,
+                do_constant_folding=True,          # 常量折叠
+                keep_initializers_as_inputs=False, # 移除常量输入
+                input_names=input_names,
+                output_names=['y'],
+                dynamic_axes={
+                    "attn": {0: "batch", 1: "seq_len", 2: "attn_dim"},   # attn 形状 [batch, seq_len, 256]
+                    "y_mask": {0: "batch", 1: "channels", 2: "seq_len"},  # y_mask 形状 [batch, 1, seq_len]
+                    "m_p": {0: "batch", 1: "channels", 2: "seq_len"},     # m_p 形状 [batch, 192, seq_len]
+                    "logs_p": {0: "batch", 1: "channels", 2: "seq_len"},  # logs_p 形状 [batch, 192, seq_len]
+                    "y": {0: "batch", 1: "channels", 2: "seq_len"}        # 输出 y 形状 [batch, 1, audio_len]
+                    # g 和 noise_scale 固定，不配置动态
+                }
+            )
             sim_model,_ = onnxsim.simplify(decoder_name)
             onnx.save(sim_model, decoder_name)
-            print(f"Export decoder to {decoder_name}")
+            print(f"Export decoder to {decoder_name} (dynamic shape)")
