@@ -1,62 +1,67 @@
-<div align="center">
-  <div>&nbsp;</div>
-  <img src="logo.png" width="300"/> <br>
-  <a href="https://trendshift.io/repositories/8133" target="_blank"><img src="https://trendshift.io/api/badge/repositories/8133" alt="myshell-ai%2FMeloTTS | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-</div>
+# MeloTTS-RKNN
 
-## Introduction
-MeloTTS is a **high-quality multi-lingual** text-to-speech library by [MIT](https://www.mit.edu/) and [MyShell.ai](https://myshell.ai). Supported languages include:
+> MeloTTS ONNX export + RKNN deployment for Rockchip NPU (RK3588/RK3576)
 
-| Language | Example |
-| --- | --- |
-| English (American)    | [Link](https://myshell-public-repo-host.s3.amazonaws.com/myshellttsbase/examples/en/EN-US/speed_1.0/sent_000.wav) |
-| English (British)     | [Link](https://myshell-public-repo-host.s3.amazonaws.com/myshellttsbase/examples/en/EN-BR/speed_1.0/sent_000.wav) |
-| English (Indian)      | [Link](https://myshell-public-repo-host.s3.amazonaws.com/myshellttsbase/examples/en/EN_INDIA/speed_1.0/sent_000.wav) |
-| English (Australian)  | [Link](https://myshell-public-repo-host.s3.amazonaws.com/myshellttsbase/examples/en/EN-AU/speed_1.0/sent_000.wav) |
-| English (Default)     | [Link](https://myshell-public-repo-host.s3.amazonaws.com/myshellttsbase/examples/en/EN-Default/speed_1.0/sent_000.wav) |
-| Spanish               | [Link](https://myshell-public-repo-host.s3.amazonaws.com/myshellttsbase/examples/es/ES/speed_1.0/sent_000.wav) |
-| French                | [Link](https://myshell-public-repo-host.s3.amazonaws.com/myshellttsbase/examples/fr/FR/speed_1.0/sent_000.wav) |
-| Chinese (mix EN)      | [Link](https://myshell-public-repo-host.s3.amazonaws.com/myshellttsbase/examples/zh/ZH/speed_1.0/sent_008.wav) |
-| Japanese              | [Link](https://myshell-public-repo-host.s3.amazonaws.com/myshellttsbase/examples/jp/JP/speed_1.0/sent_000.wav) |
-| Korean                | [Link](https://myshell-public-repo-host.s3.amazonaws.com/myshellttsbase/examples/kr/KR/speed_1.0/sent_000.wav) |
+基于 [mmontol/MeloTTS](https://github.com/mmontol/MeloTTS) 社区版，增加 RKNN 转换脚本、INT8 量化支持和完整部署文档。
 
-Some other features include:
-- The Chinese speaker supports `mixed Chinese and English`.
-- Fast enough for `CPU real-time inference`.
 
-## Usage
-- [Use without Installation](docs/quick_use.md)
-- [Install and Use Locally](docs/install.md)
-- [Training on Custom Dataset](docs/training.md)
+## 📌 本仓做了什么
 
-The Python API and model cards can be found in [this repo](https://github.com/myshell-ai/MeloTTS/blob/main/docs/install.md#python-api) or on [HuggingFace](https://huggingface.co/myshell-ai).
+| 功能 | 说明 |
+|------|------|
+| ONNX 导出 | 社区版已有，本仓库优化了导出配置（常量折叠、动态轴命名等） |
+| RKNN 转换 | 新增 `convert_dynamic.py`，自动识别 Encoder/Decoder |
+| INT8 量化 | 新增 `generate_dataset.py`，支持 `--do_quant` 量化转换 |
+| 日语词典报错修复 | 修复 MeCab 初始化失败问题 |
 
-**Contributing**
+# 📁 文件说明
 
-If you find this work useful, please consider contributing to this repo.
+| 文件                  | 说明                                                         |
+| --------------------- | ------------------------------------------------------------ |
+| export_onnx.py        | ONNX 导出入口                                                 |
+| convert_dynamic.py    | RKNN 转换脚本，支持 --do_quant 和 --seq_lens                  |
+| generate_dataset.py   | INT8 量化校准数据生成                                         |
+| melo/api.py           | ONNX 导出方法（优化了常量折叠和动态轴配置）|
 
-- Many thanks to [@fakerybakery](https://github.com/fakerybakery) for adding the Web UI and CLI part.
+# ⚠️ 已知限制
 
-## Authors
+- Decoder 仅支持 seq_len=256（多长度转换在 RKNN 上不稳定）
 
-- [Wenliang Zhao](https://wl-zhao.github.io) at Tsinghua University
-- [Xumin Yu](https://yuxumin.github.io) at Tsinghua University
-- [Zengyi Qin](https://www.qinzy.tech) (project lead) at MIT and MyShell
+- Encoder INT8 量化可能失败，建议使用 FP16
 
-**Citation**
-```
-@software{zhao2024melo,
-  author={Zhao, Wenliang and Yu, Xumin and Qin, Zengyi},
-  title = {MeloTTS: High-quality Multi-lingual Multi-accent Text-to-Speech},
-  url = {https://github.com/myshell-ai/MeloTTS},
-  year = {2023}
-}
+
+## 🚀 快速开始
+
+### 1. 安装依赖
+```bash
+pip install -r requirements.txt
+pip install rknn-toolkit2  # 需要 RK3588 开发环境
 ```
 
-## License
+### 2. 导出 ONNX
+```bash
+conda activate 3.9-melotts
+python export_onnx.py
+```
 
-This library is under MIT License, which means it is free for both commercial and non-commercial use.
+### 3. 生成校准数据（可选，用于 INT8 量化）
+```bash
+python generate_dataset.py
+```
 
-## Acknowledgements
+### 4. 转换为 RKNN
+```bash
+conda activate py3.11-tk2-2.3.2
 
-This implementation is based on [TTS](https://github.com/coqui-ai/TTS), [VITS](https://github.com/jaywalnut310/vits), [VITS2](https://github.com/daniilrobnikov/vits2) and [Bert-VITS2](https://github.com/fishaudio/Bert-VITS2). We appreciate their awesome work.
+# FP16（推荐，稳定）
+python convert_dynamic.py encoder-ZH_MIX_EN.onnx rk3588
+python convert_dynamic.py decoder-ZH_MIX_EN.onnx rk3588 --seq_lens 256
+
+# INT8 量化（模型更小，速度略快）
+python convert_dynamic.py encoder-ZH_MIX_EN.onnx rk3588 --do_quant
+python convert_dynamic.py decoder-ZH_MIX_EN.onnx rk3588 --do_quant --seq_lens 256
+```
+
+# 📄 License
+
+MIT

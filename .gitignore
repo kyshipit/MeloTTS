@@ -9,3 +9,9 @@ build/
 
 *.zip
 *.wav
+*.onnx
+*.rknn
+*.txt
+calibration_data*/
+MeloTTS-Chinese/
+
