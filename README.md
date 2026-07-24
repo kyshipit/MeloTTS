@@ -23,13 +23,6 @@
 | generate_dataset.py   | INT8 量化校准数据生成                                         |
 | melo/api.py           | ONNX 导出方法（优化了常量折叠和动态轴配置）|
 
-### ⚠️ 已知限制
-
-- Decoder 仅支持 seq_len=256（多长度转换在 RKNN 上不稳定）
-
-- Encoder INT8 量化可能失败，建议使用 FP16
-
-
 ### 🚀 快速开始
 
 #### 1. 导出 ONNX
