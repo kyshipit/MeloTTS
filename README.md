@@ -77,6 +77,10 @@ MeloTTS 的 ONNX 导出基于 Torch Tracing 机制，`dynamic_axes` 仅为 ONNX 
 
 - INT8 量化后 TTS 音质可能有轻微下降，这是生成式任务 INT8 量化的固有限制
 
+### 致谢
+
+本仓库基于 mmontol/MeloTTS 开发，感谢 mmontol 提供的 ONNX 导出实现。
+
 ### 📄 License
 
 MIT
