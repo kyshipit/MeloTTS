@@ -1,85 +1,95 @@
+🌐 Language: **English** | [中文](README.zh.md)
+
 ## MeloTTS-RKNN
 
 > MeloTTS ONNX export + RKNN deployment for Rockchip NPU (RK3588/RK3576)
 
-基于 [mmontol/MeloTTS](https://github.com/mmontol/MeloTTS) 社区版，增加 RKNN 转换脚本、INT8 量化支持和完整部署文档。
+Based on the community edition [mmontol/MeloTTS](https://github.com/mmontol/MeloTTS), with added RKNN conversion scripts, INT8 quantization support, and complete deployment documentation.
 
 
-### 📌 本仓做了什么
+### 📌 What This Repository Does
 
-| 功能 | 说明 |
+| Feature | Description |
 |------|------|
-| ONNX 导出 | 社区版已有，本仓库优化了导出配置（常量折叠、动态轴命名等） |
-| RKNN 转换 | 新增 `convert_dynamic.py`，自动识别 Encoder/Decoder |
-| INT8 量化 | 新增 `generate_dataset.py`和 `convert_bin_to_npy.py`，支持 `--do_quant` 量化转换 |
-| 日语词典报错修复 | 修复 MeCab 初始化失败问题 |
+| ONNX export | Already available in the community edition; this repository optimizes the export configuration (constant folding, dynamic axis naming, etc.) |
+| RKNN conversion | Added `convert_dynamic.py`, which automatically detects Encoder/Decoder |
+| INT8 quantization | Added `generate_dataset.py` (random calibration data) and `convert_bin_to_npy.py` (real calibration data conversion), supporting `--do_quant` quantized conversion |
+| Japanese dictionary error fix | Fixes the MeCab initialization failure issue |
 
-### 📁 文件说明
 
-| 文件 | 说明 |
+### 📁 File Description
+
+| File | Description |
 |------|------|
-| `export_onnx.py` | ONNX 导出入口 |
-| `convert_dynamic.py` | RKNN 转换脚本，支持 `--do_quant` 和 `--seq_lens` |
-| `generate_dataset.py` | INT8 量化校准数据生成（随机数据，仅供功能验证） |
-| `convert_bin_to_npy.py` | 将开发板 C++ 程序导出的 `.bin` 校准数据转换为 `.npy` 格式 |
-| `melo/api.py` | ONNX 导出方法（优化了常量折叠和动态轴配置） |
+| `export_onnx.py` | ONNX export entry point |
+| `convert_dynamic.py` | RKNN conversion script, supports `--do_quant` and `--seq_lens` |
+| `generate_dataset.py` | Generates INT8 quantization calibration data (random data, for functional verification only) |
+| `convert_bin_to_npy.py` | Converts `.bin` calibration data exported by the board-side C++ program into `.npy` format |
+| `melo/api.py` | ONNX export method (optimized constant folding and dynamic axis configuration) |
 
-### 🚀 快速开始
 
-#### 1. 导出 ONNX
-```bash
+### 🚀 Quick Start
+
+#### 1. Export ONNX
+
+```
 conda activate 3.9-melotts
 pip install -r requirements.txt
 python export_onnx.py
 ```
 
-#### 2. 生成校准数据（可选，用于 INT8 量化）
-```bash
+#### 2. Generate Calibration Data (Optional, for INT8 Quantization)
+
+```
 python generate_dataset.py
 ```
 
-#### 3. 转换为 RKNN
-```bash
+
+
+#### 3. Convert to RKNN
+
+```
 conda activate py3.11-tk2-2.3.2
 
-# FP16（推荐，稳定）
+# FP16 (recommended, clear audio quality)
 python convert_dynamic.py encoder-ZH_MIX_EN.onnx rk3588
 python convert_dynamic.py decoder-ZH_MIX_EN.onnx rk3588 --seq_lens 256
 
-# INT8 量化（模型更小，速度略快）
+# INT8 quantization (smaller size, lossy audio quality)
 python convert_dynamic.py encoder-ZH_MIX_EN.onnx rk3588 --do_quant
 python convert_dynamic.py decoder-ZH_MIX_EN.onnx rk3588 --do_quant --seq_lens 256
 ```
 
-## 关键技术说明
 
-### 1. 关于动态 Shape
+## Key Technical Notes
 
-MeloTTS 的 ONNX 导出基于 Torch Tracing 机制，`dynamic_axes` 仅为 ONNX 元数据标记，实际计算图已被固化。因此 RKNN 转换时只能使用单长度 `seq_lens=256`，多长度配置（如 128/256/512）会导致 `MatMul dimension mismatch`。
+### 1. About Dynamic Shape
 
-### 2. INT8 量化校准数据说明
+MeloTTS ONNX export is based on the Torch Tracing mechanism. `dynamic_axes` is only an ONNX metadata marker, and the actual computation graph has already been fixed. Therefore, during RKNN conversion, only a single length `seq_lens=256` can be used. Multi-length configurations (such as 128/256/512) will cause `MatMul dimension mismatch`, because the ONNX internals have already been fixed to 256.
 
-本仓库提供 `generate_dataset.py` 用于生成随机校准数据（仅供功能验证使用）。如需实际部署 INT8 模型，建议使用真实推理数据：
+### 2. INT8 Quantization Calibration Data Notes
 
-1. 在开发板 C++ 推理程序中，在 `middle_process` 后保存 Decoder 的六个输入张量（`attn`、`y_mask`、`g`、`m_p`、`logs_p`、`noise_scale`）为 `.bin` 文件
+This repository provides `generate_dataset.py` to generate random calibration data (for functional verification only). For actual INT8 model deployment, it is recommended to use real inference data:
 
-2. 使用 `convert_bin_to_npy.py` 将 `.bin` 转换为 `.npy` 格式，生成 `dataset_decoder.txt`
+1. In the board-side C++ inference program, after `middle_process`, save the Decoder's six input tensors (`attn`, `y_mask`, `g`, `m_p`, `logs_p`, `noise_scale`) as `.bin` files
+2. Use `convert_bin_to_npy.py` to convert the `.bin` files into `.npy` format, generating `dataset_decoder.txt`
+3. Re-run INT8 quantization using the real calibration data
 
-3. 使用真实校准数据重新执行 INT8 量化
+> Note: Random-number calibration can pass `rknn.build`, but the model outputs silence; the calibration data shape must match the model's fixed dimensions (Decoder's `attn` is uniformly `[1, 512, 256]`).
 
-> 注意：随机数校准可通过 `rknn.build` 但模型输出静音；校准数据 shape 必须与模型固化维度一致（Decoder 的 `attn` 统一为 `[1, 512, 256]`）。
+### 3. Known Limitations
 
-### 3. 已知限制
+- Decoder only supports seq_len=256 (multi-length configurations will directly report MatMul dimension mismatch)
+- Encoder INT8 quantization fails due to the `Less` operator type conflict
+- After INT8 quantization, Decoder audio quality degrades noticeably (noise), and it is not recommended for production environments
 
-- Decoder 仅支持 `seq_len=256`（多长度转换在 RKNN 上不稳定）
+### 4. Summary Document
 
-- Encoder INT8 量化因 `Less` 算子类型冲突可能失败，建议使用 FP16
+- [MeloTTS RKNN Quantization Deployment Pitfall Record](https://github.com/kyshipit/tech-notes/blob/main/en/deploy/MeloTTS-RKNN-Quantization-Deployment-Pitfalls.md) — Full deployment workflow from PyTorch → ONNX → RKNN, recording core pitfalls such as dynamic dimensions, pseudo-dynamic dimensions, INT8 quantization, and Less operator conflicts.
 
-- INT8 量化后 TTS 音质可能有轻微下降，这是生成式任务 INT8 量化的固有限制
+### Acknowledgements
 
-### 致谢
-
-本仓库基于 mmontol/MeloTTS 开发，感谢 mmontol 提供的 ONNX 导出实现。
+This repository is developed based on mmontol/MeloTTS. Thanks to mmontol for providing the ONNX export implementation.
 
 ### 📄 License
 
